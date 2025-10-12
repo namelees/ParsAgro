@@ -262,7 +262,7 @@ def health_check():
             "timestamp": datetime.now().isoformat(),
             "bot_token": "configured" if TOKEN else "missing",
             "registered_users": len(user_urls),
-            "version": "1.0.0"
+            "version": os.getenv("VERSION", "unknown")
         }
         return jsonify(status), 200
     except Exception as e:
