@@ -66,20 +66,20 @@ jobs:
           docker rm parsagro-bot || true
           
           # Удаление старого образа для экономии места
-          docker image rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} || true
+          docker image rm ghcr.io/namelees/parsagro:${{ github.ref_name }} || true
           
           # Логин в GitHub Container Registry
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
           
           # Загрузка нового образа
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          docker pull ghcr.io/namelees/parsagro:${{ github.ref_name }}
           
           # Запуск нового контейнера с переменной BOT_TOKEN
           docker run -d \
             --name parsagro-bot \
             --restart unless-stopped \
             -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ghcr.io/namelees/parsagro:${{ github.ref_name }}
           
           # Очистка неиспользуемых образов
           docker image prune -f
