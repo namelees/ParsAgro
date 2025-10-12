@@ -61,18 +61,22 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ vars.SERVER_PORT }}
         script: |
+          TAG=${{ github.ref_name }}
+          TAG=${TAG#v}  # убираем префикс 'v', если есть
+          echo "Using tag: $TAG"
+
           # Остановка и удаление старого контейнера если он существует
           docker stop parsagro-bot || true
           docker rm parsagro-bot || true
           
           # Удаление старого образа для экономии места
-          docker image rm ghcr.io/namelees/parsagro:${{ github.ref_name#v }} || true
+          docker image rm ghcr.io/namelees/parsagro:$TAG || true
           
           # Логин в GitHub Container Registry
           echo ${{ secrets.REPO_TOKEN }} | docker login ${{ env.REGISTRY }} -u namelees --password-stdin
           
           # Загрузка нового образа
-          docker pull ghcr.io/namelees/parsagro:${{ github.ref_nam#v }}
+          docker pull ghcr.io/namelees/parsagro:$TAG
           
           # Запуск нового контейнера с переменной BOT_TOKEN и пробросом порта
           docker run -d \
@@ -80,7 +84,7 @@ jobs:
             --restart unless-stopped \
             -p 5000:5000 \
             -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" \
-            ghcr.io/namelees/parsagro:${{ github.ref_name#v }}
+            ghcr.io/namelees/parsagro:$TAG
           
           # Очистка неиспользуемых образов
           docker image prune -f
