@@ -19,11 +19,11 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
+# Копируем исходный код
+COPY src/ /app
+
 # Устанавливаем рабочую директорию
 WORKDIR /app
-
-# Копируем исходный код
-COPY src/ ./src/
 
 # Устанавливаем Python зависимости
 RUN pip install --no-cache-dir -r requirements.txt
