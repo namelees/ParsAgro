@@ -1,10 +1,12 @@
 import os
 import asyncio
 import logging
+import threading
 from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from flask import Flask, jsonify
 
 load_dotenv(".env.txt")  # Убрал .txt
 TOKEN = os.getenv('BOT_TOKEN')
@@ -13,6 +15,9 @@ if not TOKEN:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Flask приложение для health check
+app = Flask(__name__)
 
 user_urls = {} 
 
@@ -246,7 +251,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Используй кнопки для навигации 👆")
 
+# Health check эндпоинт
+@app.route('/health')
+def health_check():
+    """Health check эндпоинт для мониторинга состояния бота"""
+    try:
+        # Проверяем основные компоненты
+        status = {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "bot_token": "configured" if TOKEN else "missing",
+            "registered_users": len(user_urls),
+            "version": "1.0.0"
+        }
+        return jsonify(status), 200
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return jsonify({
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }), 500
+
+def run_flask_app():
+    """Запуск Flask приложения в отдельном потоке"""
+    app.run(host='0.0.0.0', port=5000, debug=False)
+
 def main():
+    # Запускаем Flask в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask_app, daemon=True)
+    flask_thread.start()
+    logger.info("Flask health check сервер запущен на порту 5000")
+    
+    # Запускаем Telegram бота
     application = Application.builder().token(TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
@@ -254,7 +291,7 @@ def main():
     application.add_handler(CommandHandler("help", handle_help))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    logger.info("Бот запущен...")
+    logger.info("Telegram бот запущен...")
     application.run_polling()
 
 if __name__ == "__main__":

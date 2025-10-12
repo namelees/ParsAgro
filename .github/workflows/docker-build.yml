@@ -74,10 +74,11 @@ jobs:
           # Загрузка нового образа
           docker pull ghcr.io/namelees/parsagro:${{ github.ref_name }}
           
-          # Запуск нового контейнера с переменной BOT_TOKEN
+          # Запуск нового контейнера с переменной BOT_TOKEN и пробросом порта
           docker run -d \
             --name parsagro-bot \
             --restart unless-stopped \
+            -p 5000:5000 \
             -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" \
             ghcr.io/namelees/parsagro:${{ github.ref_name }}
           

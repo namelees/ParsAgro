@@ -22,17 +22,14 @@ RUN apt-get update && apt-get install -y \
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Копируем файл зависимостей
-COPY requirements.txt .
+# Копируем исходный код
+COPY src/ ./src/
 
 # Устанавливаем Python зависимости
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем только Chromium для Playwright
 RUN playwright install chromium
-
-# Копируем исходный код
-COPY src/ ./src/
 
 # Создаем директорию для логов
 RUN mkdir -p /app/logs
@@ -48,6 +45,9 @@ USER app
 
 # Указываем рабочую директорию для пользователя
 WORKDIR /app
+
+# Открываем порт для health check
+EXPOSE 5000
 
 # Команда по умолчанию
 CMD ["python", "src/ParsStgau.py"]
