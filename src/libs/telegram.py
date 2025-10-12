@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-load_dotenv(".env.txt")  # Убрал .txt
+load_dotenv(".env.txt")
 TOKEN = os.getenv('BOT_TOKEN')
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден!")
@@ -14,9 +14,11 @@ if not TOKEN:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Глобальный словарь для хранения URL пользователей
 user_urls = {} 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /start"""
     user = update.message.from_user
     
     guide_text = (
@@ -44,6 +46,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /reg для регистрации URL пользователя"""
     user = update.message.from_user
     user_id = user.id
     
@@ -76,6 +79,7 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def get_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик получения расписания"""
     user = update.message.from_user
     user_id = user.id
     
@@ -92,6 +96,9 @@ async def get_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_msg = await update.message.reply_text(f"🔄 Получаю расписание")
     
     try:
+        # Импортируем функцию парсинга из ParsStgau
+        from libs.ParsStgau import parse_schedule_with_containers, send_structured_schedule
+        
         schedule_data = await parse_schedule_with_containers(url)
         
         if not schedule_data:
@@ -106,113 +113,8 @@ async def get_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка при парсинге: {e}")
         await update.message.reply_text("❌ Ошибка при получении расписания.")
 
-async def parse_schedule_with_containers(group_url):
-    from playwright.async_api import async_playwright
-    
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
-        page = await browser.new_page()
-        
-        try:
-            await page.goto(group_url, wait_until='networkidle', timeout=30000)
-            await page.wait_for_timeout(18000)  
-            
-            all_containers = []
-            container_num = 1
-            
-            while container_num <= 20:
-                container_selector = f'#page-main > div > div > div:nth-child(7) > div > div > div:nth-child({container_num}) > div > div'
-                container = await page.query_selector(container_selector)
-                
-                if not container:
-                    logger.info(f"Контейнер {container_num} не найден, завершаем")
-                    break
-                
-                await container.scroll_into_view_if_needed()
-                await page.wait_for_timeout(500)
-                
-                container_data = {
-                    'container_number': container_num,
-                    'lessons': []
-                }
-                
-                lesson_num = 1
-                while lesson_num <= 50:
-                    lesson_selector = f'{container_selector} > div:nth-child({lesson_num})'
-                    lesson_element = await page.query_selector(lesson_selector)
-                    
-                    if not lesson_element:
-                        break
-                    
-                    await lesson_element.scroll_into_view_if_needed()
-                    await page.wait_for_timeout(200)
-                    
-                    text = await lesson_element.text_content()
-                    if text and text.strip():
-                        container_data['lessons'].append({
-                            'lesson_number': lesson_num,
-                            'text': text.strip()
-                        })
-                        logger.info(f"Найдено занятие {lesson_num} в контейнере {container_num}")
-                    
-                    lesson_num += 1
-                
-                if container_data['lessons']:
-                    all_containers.append(container_data)
-                    logger.info(f"Контейнер {container_num} содержит {len(container_data['lessons'])} занятий")
-                
-                container_num += 1
-            
-            await browser.close()
-            logger.info(f"Всего найдено контейнеров: {len(all_containers)}")
-            return all_containers
-            
-        except Exception as e:
-            await browser.close()
-            logger.error(f"Ошибка при парсинге: {e}")
-            return None
-
-async def send_structured_schedule(update: Update, group_name: str, schedule_data: list):
-    total_lessons = sum(len(container['lessons']) for container in schedule_data)
-    
-    for container in schedule_data:
-        Day_num = container['container_number']
-        lessons = container['lessons']
-        
-        if not lessons:
-            continue
-        
-        container_header = (
-            f"📦 ДЕНЬ #{Day_num}\n"
-            f"📚 Занятий: {len(lessons)}\n"
-        )
-        await update.message.reply_text(container_header)
-        
-        for lesson in lessons:
-            lesson_num = lesson['lesson_number']
-            lesson_text = lesson['text']
-            
-            lesson_message = (
-                f"🎯 Занятие {lesson_num}\n"
-                f"{'─'*20}\n"
-                f"{lesson_text}\n"
-                f"{'─'*20}"
-            )
-            
-            await update.message.reply_text(lesson_message)
-            await asyncio.sleep(0.2)
-        
-        await asyncio.sleep(0.3)
-    
-    await update.message.reply_text(
-        f"✅ Расписание полностью загружено!\n"
-        f"📦 Дней занятий на этой неделе: {len(schedule_data)}\n"
-        f"🎯 Занятий: {total_lessons}\n"
-        f"🕐 Обновлено: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
-        f"Для обновления нажми '📅 Получить расписание'"
-    )
-
 async def handle_register_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик кнопки регистрации"""
     await update.message.reply_text(
         "📋 Для регистрации отправь команду:\n"
         "/reg твой_url\n\n"
@@ -221,6 +123,7 @@ async def handle_register_button(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды помощи"""
     help_text = (
         "❓ ПОМОЩЬ\n\n"
         "📋 Регистрация:\n"
@@ -235,6 +138,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик текстовых сообщений"""
     text = update.message.text
     
     if text == "📋 Зарегистрировать URL":
@@ -246,16 +150,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Используй кнопки для навигации 👆")
 
-def main():
-    application = Application.builder().token(TOKEN).build()
-    
+def setup_handlers(application: Application):
+    """Настройка обработчиков для приложения"""
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reg", register)) 
     application.add_handler(CommandHandler("help", handle_help))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
+
+def create_application():
+    """Создание и настройка приложения Telegram"""
+    application = Application.builder().token(TOKEN).build()
+    setup_handlers(application)
+    return application
+
+def run_bot():
+    """Запуск бота"""
+    application = create_application()
     logger.info("Бот запущен...")
     application.run_polling()
-
-if __name__ == "__main__":
-    main()
