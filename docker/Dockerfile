@@ -50,4 +50,4 @@ WORKDIR /app
 EXPOSE 5000
 
 # Команда по умолчанию
-CMD ["python", "src/ParsStgau.py"]
+CMD ["python", "ParsStgau.py"]
