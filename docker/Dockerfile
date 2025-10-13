@@ -25,7 +25,9 @@ RUN apt-get update && apt-get install -y \
     libcups2 \
     libxshmfence1 \
     xdg-utils \
-    libnspr4 \
+    libnspr4 \     
+    libpango-1.0-0 \
+    libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем исходники приложения
