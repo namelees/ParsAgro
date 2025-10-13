@@ -1,7 +1,6 @@
-# Используем официальный Python образ
 FROM python:3.11-slim
 
-# Устанавливаем минимальные системные зависимости для Playwright
+# Устанавливаем системные зависимости для Chromium
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -17,36 +16,30 @@ RUN apt-get update && apt-get install -y \
     libgbm1 \
     libxss1 \
     libasound2 \
+    fonts-liberation \
+    libatk1.0-0 \
+    libcups2 \
+    libxshmfence1 \
+    xdg-utils \
+    libnspr4 \
     && rm -rf /var/lib/apt/lists/*
 
-# Копируем исходный код
+# Копируем исходники приложения
 COPY src/ /app
-
-# Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Устанавливаем Python зависимости
+# Устанавливаем зависимости Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# (Перенесено ниже, чтобы установить браузер от имени пользователя app)
+# Устанавливаем Playwright и Chromium
+RUN playwright install --with-deps chromium
 
-# Создаем директорию для логов
-RUN mkdir -p /app/logs
-
-# Устанавливаем переменные окружения
+# Переменные окружения
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Указываем рабочую директорию для пользователя
-WORKDIR /app
-
-# Устанавливаем только Chromium для Playwright от имени пользователя app,
-# чтобы браузеры попали в /home/app/.cache/ms-playwright
-RUN playwright install chromium
-RUN playwright install-deps
-
-# Открываем порт для health check
+# Открываем порт для health-check (по необходимости)
 EXPOSE 5000
 
-# Команда по умолчанию
+# Запускаем приложение под root (проще, чтобы не было проблем с кэшем браузеров)
 CMD ["python", "ParsStgau.py"]
