@@ -43,6 +43,7 @@ WORKDIR /app
 # Устанавливаем только Chromium для Playwright от имени пользователя app,
 # чтобы браузеры попали в /home/app/.cache/ms-playwright
 RUN playwright install chromium
+RUN playwright install-deps
 
 # Открываем порт для health check
 EXPOSE 5000
