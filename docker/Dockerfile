@@ -1,3 +1,6 @@
+# ===============================
+#  Рабочий Dockerfile для Python + Playwright
+# ===============================
 FROM python:3.11-slim
 
 # Устанавливаем системные зависимости для Chromium
@@ -17,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libasound2 \
     fonts-liberation \
+    fonts-unifont \
     libatk1.0-0 \
     libcups2 \
     libxshmfence1 \
@@ -28,18 +32,18 @@ RUN apt-get update && apt-get install -y \
 COPY src/ /app
 WORKDIR /app
 
-# Устанавливаем зависимости Python
+# Устанавливаем Python зависимости
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Устанавливаем Playwright и Chromium
-RUN playwright install --with-deps chromium
+# Устанавливаем Chromium (без --with-deps!)
+RUN playwright install chromium
 
 # Переменные окружения
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Открываем порт для health-check (по необходимости)
+# Открываем порт (если нужно)
 EXPOSE 5000
 
-# Запускаем приложение под root (проще, чтобы не было проблем с кэшем браузеров)
+# Запускаем приложение
 CMD ["python", "ParsStgau.py"]
