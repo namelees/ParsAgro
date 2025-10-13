@@ -28,8 +28,7 @@ WORKDIR /app
 # Устанавливаем Python зависимости
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Устанавливаем только Chromium для Playwright
-RUN playwright install chromium
+# (Перенесено ниже, чтобы установить браузер от имени пользователя app)
 
 # Создаем директорию для логов
 RUN mkdir -p /app/logs
@@ -45,6 +44,10 @@ USER app
 
 # Указываем рабочую директорию для пользователя
 WORKDIR /app
+
+# Устанавливаем только Chromium для Playwright от имени пользователя app,
+# чтобы браузеры попали в /home/app/.cache/ms-playwright
+RUN playwright install chromium
 
 # Открываем порт для health check
 EXPOSE 5000
