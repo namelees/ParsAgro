@@ -1,0 +1,91 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Deploy to server via SSH
+      if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ vars.SERVER_HOST }}
+        username: ${{ vars.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: ${{ vars.SERVER_PORT }}
+        script: |
+          TAG=${{ github.ref_name }}
+          TAG=${TAG#v}  # убираем префикс 'v', если есть
+          echo "Using tag: $TAG"
+
+          # Остановка и удаление старого контейнера если он существует
+          docker stop parsagro-bot || true
+          docker rm parsagro-bot || true
+          
+          # Удаление старого образа для экономии места
+          docker image rm ghcr.io/namelees/parsagro:$TAG || true
+          
+          # Логин в GitHub Container Registry
+          echo ${{ secrets.REPO_TOKEN }} | docker login ${{ env.REGISTRY }} -u namelees --password-stdin
+          
+          # Загрузка нового образа
+          docker pull ghcr.io/namelees/parsagro:$TAG
+          
+          # Запуск нового контейнера с переменной BOT_TOKEN и пробросом порта
+          docker run -d \
+            --name parsagro-bot \
+            --restart unless-stopped \
+            -p 5000:5000 \
+            -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" \
+            -e VERSION="${{ github.ref_name }}" \
+            ghcr.io/namelees/parsagro:$TAG
+          
+          # Очистка неиспользуемых образов
+          docker image prune -f
