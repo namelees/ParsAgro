@@ -1,12 +1,13 @@
 import os
 import asyncio
 import logging
+import json
 from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-load_dotenv(".env.txt")  # Убрал .txt
+load_dotenv(".env.txt")
 TOKEN = os.getenv('BOT_TOKEN')
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден!")
@@ -15,26 +16,59 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 user_urls = {} 
+groups_database = {}
+
+def load_groups_data():
+    """Загружает данные групп из файла (синхронная версия)"""
+    global groups_database
+    try:
+        with open('groups_data.json', 'r', encoding='utf-8') as f:
+            groups_database = json.load(f)
+        logger.info(f"✅ Загружено {len(groups_database)} групп из файла")
+    except FileNotFoundError:
+        logger.error("❌ Файл groups_data.json не найден")
+        groups_database = {}
+    except Exception as e:
+        logger.error(f"❌ Ошибка загрузки групп: {e}")
+        groups_database = {}
+
+def find_group(query):
+    """Умный поиск группы по названию или номеру"""
+    query = query.strip().lower()
+    
+    for group_name, group_url in groups_database.items():
+        if group_name.lower() == query:
+            return group_name, group_url
+    
+    if query.isdigit():
+        for group_name, group_url in groups_database.items():
+            if query in group_url:
+                return group_name, group_url
+    matches = []
+    for group_name, group_url in groups_database.items():
+        if query in group_name.lower():
+            matches.append((group_name, group_url))
+    
+    return matches
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     
     guide_text = (
         "👋 Привет! Я бот для получения расписания занятий.\n\n"
-        "📖 КАК ПОЛУЧИТЬ URL РАСПИСАНИЯ:\n"
-        "1. Перейди на сайт: https://lk2.stgau.ru/WebApp/#/Rasp\n"
-        "2. Найди свою группу в списке\n"
-        "3. Нажми на группу - откроется страница расписания\n"
-        "4. Скопируй URL из адресной строки браузера\n"
-        "5. Отправь его мне командой: /reg твой_url\n\n"
-        "🔗 Пример URL:\n"
-        "https://lk2.stgau.ru/WebApp/#/Rasp/Group/22222 \n "
-        "По всем вопросам и предложениям писать на ТГ Создателя и владельца бота, он приведен ниже \n"
-        " @Pro100_4elovek19"
+        "🎯 ДЛЯ НАЧАЛА РАБОТЫ:\n\n"
+        "1. Зарегистрируй свою группу:\n"
+        "/reg название_группы\n\n"
+        "Примеры:\n"
+        "/reg ИСП-21-1\n"
+        "/reg 22296\n"
+        "/reg ПРОГ-20-1\n\n"
+        "2. Получай расписание кнопкой ниже!\n\n"
+        "По всем вопросам: @Pro100_4elovek19"
     )
     
     reply_markup = ReplyKeyboardMarkup([
-        ["📋 Зарегистрировать URL"],
+        ["🎯 Зарегистрировать группу"],
         ["📅 Получить расписание", "❓ Помощь"]
     ], resize_keyboard=True)
     
@@ -43,37 +77,99 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def register_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Регистрация по названию группы"""
     user = update.message.from_user
     user_id = user.id
     
     if not context.args:
         await update.message.reply_text(
             "❌ Использование:\n"
-            "/reg ваш_url\n\n"
-            "Пример:\n"
-            "/reg https://lk2.stgau.ru/WebApp/#/Rasp/Group/22222"
+            "/reg название_группы\n\n"
+            "Примеры:\n"
+            "/reg ИСП-21-1\n"
+            "/reg 22296\n"
+            "/reg ПРОГ-20-1\n\n"
+            "Просто введи номер или название группы!"
         )
         return
     
-    url = ' '.join(context.args)
+    group_query = ' '.join(context.args)
     
-    if not url.startswith('https://lk2.stgau.ru/WebApp/#/Rasp/Group/'):
+    result = find_group(group_query)
+    
+    if isinstance(result, tuple):
+        group_name, group_url = result
+        user_urls[user_id] = group_url
+        
         await update.message.reply_text(
-            "❌ Неверный URL!\n"
-            "URL должен начинаться с:\n"
-            "https://lk2.stgau.ru/WebApp/#/Rasp/Group/\n\n"
-            "Проверь правильность ссылки и попробуй снова."
+            f"✅ Группа зарегистрирована!\n"
+            f"📚 Группа: {group_name}\n\n"
+            f"Теперь нажми '📅 Получить расписание'!"
         )
-        return
+        
+    elif isinstance(result, list) and len(result) > 0:
+        if len(result) == 1:
+            group_name, group_url = result[0]
+            user_urls[user_id] = group_url
+            await update.message.reply_text(f"✅ Группа {group_name} зарегистрирована!")
+        else:
+            keyboard = []
+            for group_name, group_url in result[:5]:  
+                keyboard.append([f"🎯 {group_name}"])
+            
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
+            context.user_data['group_matches'] = result
+            
+            await update.message.reply_text(
+                f"🔍 Найдено {len(result)} групп:\n"
+                f"Выбери нужную группу:",
+                reply_markup=reply_markup
+            )
+    else:
+        await update.message.reply_text(
+            f"❌ Группа '{group_query}' не найдена.\n\n"
+            f"Попробуй:\n"
+            f"• Проверить написание\n"
+            f"• Использовать номер группы\n"
+            f"• Убедиться, что группа есть в списке"
+        )
+
+async def handle_group_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка выбора группы из предложенных вариантов"""
+    user = update.message.from_user
+    user_id = user.id
+    selected_text = update.message.text
     
-    user_urls[user_id] = url
-    group_number = url.split('/')[-1]
+    if selected_text.startswith("🎯 "):
+        selected_group = selected_text[2:]  # Убираем "🎯 "
+    else:
+        selected_group = selected_text
     
-    await update.message.reply_text(
-        f"✅ Регистрация успешна!\n"
-        f"Теперь нажми '📅 Получить расписание'!"
-    )
+    # Ищем в сохраненных вариантах
+    matches = context.user_data.get('group_matches', [])
+    for group_name, group_url in matches:
+        if group_name == selected_group:
+            user_urls[user_id] = group_url
+            
+            # Восстанавливаем основную клавиатуру
+            reply_markup = ReplyKeyboardMarkup([
+                ["🎯 Зарегистрировать группу"],
+                ["📅 Получить расписание", "❓ Помощь"]
+            ], resize_keyboard=True)
+            
+            await update.message.reply_text(
+                f"✅ Группа {group_name} зарегистрирована!\n\n"
+                f"Теперь нажми '📅 Получить расписание'!",
+                reply_markup=reply_markup
+            )
+            
+            # Очищаем временные данные
+            context.user_data.pop('group_matches', None)
+            return
+    
+    await update.message.reply_text("❌ Ошибка выбора группы")
 
 async def get_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -81,15 +177,15 @@ async def get_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if user_id not in user_urls:
         await update.message.reply_text(
-            "❌ Сначала зарегистрируй свой URL!\n"
-            "Нажми '📋 Зарегистрировать URL'"
+            "❌ Сначала зарегистрируй свою группу!\n"
+            "Нажми '🎯 Зарегистрировать группу'"
         )
         return
     
     url = user_urls[user_id]
     group_number = url.split('/')[-1]
     
-    status_msg = await update.message.reply_text(f"🔄 Получаю расписание")
+    status_msg = await update.message.reply_text(f"🔄 Получаю расписание...")
     
     try:
         schedule_data = await parse_schedule_with_containers(url)
@@ -98,7 +194,7 @@ async def get_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await status_msg.edit_text("❌ Не удалось получить расписание. Попробуй позже.")
             return
         
-        await status_msg.edit_text(f"✅ Найдено {len(schedule_data)} контейнеров с занятиями. Отправляю...")
+        await status_msg.edit_text(f"✅ Найдено {len(schedule_data)} дней с занятиями. Отправляю...")
         
         await send_structured_schedule(update, group_number, schedule_data)
         
@@ -120,7 +216,7 @@ async def parse_schedule_with_containers(group_url):
             all_containers = []
             container_num = 1
             
-            while container_num <= 20:
+            while container_num <= 50:
                 container_selector = f'#page-main > div > div > div:nth-child(7) > div > div > div:nth-child({container_num}) > div > div'
                 container = await page.query_selector(container_selector)
                 
@@ -206,30 +302,34 @@ async def send_structured_schedule(update: Update, group_name: str, schedule_dat
     
     await update.message.reply_text(
         f"✅ Расписание полностью загружено!\n"
-        f"📦 Дней занятий на этой неделе: {len(schedule_data)}\n"
-        f"🎯 Занятий: {total_lessons}\n"
+        f"📦 Дней занятий: {len(schedule_data)}\n"
+        f"🎯 Всего занятий: {total_lessons}\n"
         f"🕐 Обновлено: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
         f"Для обновления нажми '📅 Получить расписание'"
     )
 
 async def handle_register_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📋 Для регистрации отправь команду:\n"
-        "/reg твой_url\n\n"
-        "Пример:\n"
-        "/reg https://lk2.stgau.ru/WebApp/#/Rasp/Group/22222"
+        "🎯 Для регистрации отправь команду:\n"
+        "/reg название_группы\n\n"
+        "Примеры:\n"
+        "/reg ИСП-21-1\n"
+        "/reg 22296\n"
+        "/reg ПРОГ-20-1\n\n"
+        "Просто введи номер или название группы!"
     )
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "❓ ПОМОЩЬ\n\n"
-        "📋 Регистрация:\n"
-        "1. Найди URL на сайте расписания\n"
-        "2. Отправь: /reg твой_url\n\n"
+        "🎯 Регистрация:\n"
+        "/reg название_группы\n\n"
+        "Примеры:\n"
+        "/reg ИСП-21-1\n"
+        "/reg 22296\n"
+        "/reg ПРОГ-20-1\n\n"
         "📅 Получить расписание:\n"
         "Нажми кнопку '📅 Получить расписание'\n\n"
-        "🔗 Пример URL:\n"
-        "https://lk2.stgau.ru/WebApp/#/Rasp/Group/22222\n\n"
         "🔄 Перезапуск: /start"
     )
     await update.message.reply_text(help_text)
@@ -237,24 +337,34 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     
-    if text == "📋 Зарегистрировать URL":
+    if text.startswith("🎯 ") or context.user_data.get('group_matches'):
+        await handle_group_selection(update, context)
+    elif text == "🎯 Зарегистрировать группу":
         await handle_register_button(update, context)
     elif text == "📅 Получить расписание":
         await get_schedule(update, context)
     elif text == "❓ Помощь":
         await handle_help(update, context)
     else:
-        await update.message.reply_text("Используй кнопки для навигации 👆")
+        await update.message.reply_text(
+            "Используй кнопки или команды:\n"
+            "/reg - регистрация группы\n"
+            "/start - инструкция"
+        )
 
 def main():
+    """Основная функция запуска бота"""
+    load_groups_data()
+    
     application = Application.builder().token(TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("reg", register)) 
+    application.add_handler(CommandHandler("reg", register_group))
     application.add_handler(CommandHandler("help", handle_help))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     logger.info("Бот запущен...")
+    
     application.run_polling()
 
 if __name__ == "__main__":
