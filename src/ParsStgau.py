@@ -1,16 +1,11 @@
 import os
 import asyncio
 import logging
-<<<<<<< HEAD:ParsStgau.py
 import json
-=======
-import threading
->>>>>>> d1d0ea0e0a8a80398f1416016c84c738bc18fd8e:src/ParsStgau.py
 from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from flask import Flask, jsonify
 
 load_dotenv(".env.txt")
 TOKEN = os.getenv('BOT_TOKEN')
@@ -19,9 +14,6 @@ if not TOKEN:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Flask приложение для health check
-app = Flask(__name__)
 
 user_urls = {} 
 groups_database = {}
@@ -214,7 +206,7 @@ async def parse_schedule_with_containers(group_url):
     from playwright.async_api import async_playwright
     
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         page = await browser.new_page()
         
         try:
@@ -360,45 +352,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/start - инструкция"
         )
 
-# Health check эндпоинт
-@app.route('/health')
-def health_check():
-    """Health check эндпоинт для мониторинга состояния бота"""
-    try:
-        # Проверяем основные компоненты
-        status = {
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
-            "bot_token": "configured" if TOKEN else "missing",
-            "registered_users": len(user_urls),
-            "version": os.getenv("VERSION", "unknown")
-        }
-        return jsonify(status), 200
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return jsonify({
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }), 500
-
-def run_flask_app():
-    """Запуск Flask приложения в отдельном потоке"""
-    app.run(host='0.0.0.0', port=5000, debug=False)
-
 def main():
-<<<<<<< HEAD:ParsStgau.py
     """Основная функция запуска бота"""
     load_groups_data()
     
-=======
-    # Запускаем Flask в отдельном потоке
-    flask_thread = threading.Thread(target=run_flask_app, daemon=True)
-    flask_thread.start()
-    logger.info("Flask health check сервер запущен на порту 5000")
-    
-    # Запускаем Telegram бота
->>>>>>> d1d0ea0e0a8a80398f1416016c84c738bc18fd8e:src/ParsStgau.py
     application = Application.builder().token(TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
@@ -406,12 +363,8 @@ def main():
     application.add_handler(CommandHandler("help", handle_help))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-<<<<<<< HEAD:ParsStgau.py
     logger.info("Бот запущен...")
     
-=======
-    logger.info("Telegram бот запущен...")
->>>>>>> d1d0ea0e0a8a80398f1416016c84c738bc18fd8e:src/ParsStgau.py
     application.run_polling()
 
 if __name__ == "__main__":
