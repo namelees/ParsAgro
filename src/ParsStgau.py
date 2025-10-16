@@ -19,6 +19,27 @@ logger = logging.getLogger(__name__)
 user_urls = {} 
 groups_database = {}
 
+def create_groups_file():
+    """Создает файл с группами если его нет"""
+    if not os.path.exists('groups_data.json'):
+        # Создаем базовый словарь с несколькими группами для теста
+        sample_groups = {
+            "ИСП-21-1": "https://lk2.stgau.ru/WebApp/#/Rasp/Group/22296",
+            "ИСП-21-2": "https://lk2.stgau.ru/WebApp/#/Rasp/Group/22297", 
+            "ПРОГ-20-1": "https://lk2.stgau.ru/WebApp/#/Rasp/Group/22301",
+            "ЭКОН-19-1": "https://lk2.stgau.ru/WebApp/#/Rasp/Group/22305",
+            "22296": "https://lk2.stgau.ru/WebApp/#/Rasp/Group/22296",
+            "22297": "https://lk2.stgau.ru/WebApp/#/Rasp/Group/22297"
+        }
+        
+        with open('groups_data.json', 'w', encoding='utf-8') as f:
+            json.dump(sample_groups, f, ensure_ascii=False, indent=2)
+        
+        logger.info("✅ Создан файл groups_data.json с тестовыми группами")
+        return sample_groups
+    return None
+
+
 def load_groups_data():
     """Загружает данные групп из файла (синхронная версия)"""
     global groups_database
