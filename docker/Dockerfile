@@ -23,7 +23,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Копируем файл зависимостей
-COPY requirements.txt .
+COPY ../requirements.txt .   
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем Python зависимости
 RUN pip install --no-cache-dir -r requirements.txt
