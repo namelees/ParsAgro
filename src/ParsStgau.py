@@ -11,7 +11,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 def load_groups_data():
     """Загружает данные групп с правильным путем"""
     
-    # Пробуем разные возможные пути
+    # Пробуем разные возможные путиb
     possible_paths = [
         'src/groups_data.json',           # Относительный путь
         './src/groups_data.json',         # Тоже относительный
