@@ -8,6 +8,35 @@ from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
+def load_groups_data():
+    """Загружает данные групп с правильным путем"""
+    
+    # Пробуем разные возможные пути
+    possible_paths = [
+        'src/groups_data.json',           # Относительный путь
+        './src/groups_data.json',         # Тоже относительный
+        f'{os.getcwd()}/src/groups_data.json',  # Абсолютный путь
+        'groups_data.json',               # На всякий случай корень
+    ]
+    
+    for file_path in possible_paths:
+        try:
+            if os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    groups_database = json.load(f)
+                print(f"✅ Загружено {len(groups_database)} групп из {file_path}")
+                return groups_database
+        except Exception as e:
+            print(f"⚠️ Не удалось загрузить из {file_path}: {e}")
+            continue
+    
+    print("❌ Файл groups_data.json не найден ни по одному пути!")
+    return {}
+
+# Использование:
+groups_database = load_groups_data()
+
+
 load_dotenv(".env.txt")
 TOKEN = os.getenv('BOT_TOKEN')
 if not TOKEN:
