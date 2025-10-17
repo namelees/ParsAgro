@@ -9,11 +9,8 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 def load_groups_data():
-    """Загружает данные групп с правильным путем"""
-    
-    # Пробуем разные возможные пути
     possible_paths = [
-        'src/groups_data.json',           # Относительный путь
+        'src/groups_data.json',           # Относительный пут
         './src/groups_data.json',         # Тоже относительный
         f'{os.getcwd()}/src/groups_data.json',  # Абсолютный путь
         'groups_data.json',               # На всякий случай корень
@@ -172,17 +169,15 @@ async def handle_group_selection(update: Update, context: ContextTypes.DEFAULT_T
     selected_text = update.message.text
     
     if selected_text.startswith("🎯 "):
-        selected_group = selected_text[2:]  # Убираем "🎯 "
+        selected_group = selected_text[2:] 
     else:
         selected_group = selected_text
     
-    # Ищем в сохраненных вариантах
     matches = context.user_data.get('group_matches', [])
     for group_name, group_url in matches:
         if group_name == selected_group:
             user_urls[user_id] = group_url
             
-            # Восстанавливаем основную клавиатуру
             reply_markup = ReplyKeyboardMarkup([
                 ["🎯 Зарегистрировать группу"],
                 ["📅 Получить расписание", "❓ Помощь"]
@@ -194,7 +189,6 @@ async def handle_group_selection(update: Update, context: ContextTypes.DEFAULT_T
                 reply_markup=reply_markup
             )
             
-            # Очищаем временные данные
             context.user_data.pop('group_matches', None)
             return
     
