@@ -28,6 +28,8 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./src
+        keep_files: true
 
     - name: Extract metadata
       id: meta
