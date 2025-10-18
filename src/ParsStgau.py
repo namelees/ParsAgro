@@ -1,4 +1,3 @@
-
 import os
 import asyncio
 import logging
@@ -8,31 +7,7 @@ from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-def load_groups_data():
-    possible_paths = [
-        'src/groups_data.json',           # Относительный путь
-        './src/groups_data.json',         # Тоже относительный
-        f'{os.getcwd()}/src/groups_data.json',  # Абсолютный путь
-        'groups_data.json',               # На всякий случай корень
-    ]
-    
-    for file_path in possible_paths:
-        try:
-            if os.path.exists(file_path):
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    groups_database = json.load(f)
-                print(f"✅ Загружено {len(groups_database)} групп из {file_path}")
-                return groups_database
-        except Exception as e:
-            print(f"⚠️ Не удалось загрузить из {file_path}: {e}")
-            continue
-    
-    print("❌ Файл groups_data.json не найден ни по одному пути!")
-    return {}
-
-# Использование:
-groups_database = load_groups_data()
-
+# Загрузка переменных окружения ДО использования
 load_dotenv(".env.txt")
 TOKEN = os.getenv('BOT_TOKEN')
 if not TOKEN:
@@ -45,34 +20,55 @@ user_urls = {}
 groups_database = {}
 
 def load_groups_data():
-    """Загружает данные групп из файла (синхронная версия)"""
+    """Загружает данные групп из файла"""
     global groups_database
-    try:
-        with open('groups_data.json', 'r', encoding='utf-8') as f:
-            groups_database = json.load(f)
-        logger.info(f"✅ Загружено {len(groups_database)} групп из файла")
-    except FileNotFoundError:
-        logger.error("❌ Файл groups_data.json не найден")
-        groups_database = {}
-    except Exception as e:
-        logger.error(f"❌ Ошибка загрузки групп: {e}")
-        groups_database = {}
+    possible_paths = [
+        'src/groups_data.json',           # Относительный путь
+        './src/groups_data.json',         # Тоже относительный
+        f'{os.getcwd()}/src/groups_data.json',  # Абсолютный путь
+        'groups_data.json',               # На всякий случай корень
+        os.path.join(os.path.dirname(__file__), 'groups_data.json'),  # Рядом со скриптом
+    ]
+    
+    for file_path in possible_paths:
+        try:
+            if os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    groups_database = json.load(f)
+                logger.info(f"✅ Загружено {len(groups_database)} групп из {file_path}")
+                return
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось загрузить из {file_path}: {e}")
+            continue
+    
+    logger.error("❌ Файл groups_data.json не найден ни по одному пути!")
+    groups_database = {}
 
 def find_group(query):
     """Умный поиск группы по названию или номеру"""
-    query = query.strip().lower()
+    query = query.strip()
     
-    for group_name, group_url in groups_database.items():
-        if group_name.lower() == query:
-            return group_name, group_url
+    # 1. Точное совпадение (с учетом регистра)
+    if query in groups_database:
+        return [(query, groups_database[query])]
     
+    # 2. Поиск по номеру группы в URL
     if query.isdigit():
+        matches = []
         for group_name, group_url in groups_database.items():
             if query in group_url:
-                return group_name, group_url
+                matches.append((group_name, group_url))
+        if matches:
+            return matches
+    
+    # 3. Поиск по частичному совпадению (без приведения к lower!)
     matches = []
     for group_name, group_url in groups_database.items():
-        if query in group_name.lower():
+        # Ищем вхождение запроса в название группы
+        if query in group_name:
+            matches.append((group_name, group_url))
+        # Дополнительно ищем case-insensitive, но сохраняем оригинальное название
+        elif query.lower() in group_name.lower():
             matches.append((group_name, group_url))
     
     return matches
@@ -114,8 +110,6 @@ async def register_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/reg название_группы\n\n"
             "Примеры:\n"
             "/reg ИСП-21-1\n"
-            "/reg 22296\n"
-            "/reg ПРОГ-20-1\n\n"
             "Просто введи номер или название группы!"
         )
         return
@@ -124,22 +118,18 @@ async def register_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     result = find_group(group_query)
     
-    if isinstance(result, tuple):
-        group_name, group_url = result
-        user_urls[user_id] = group_url
-        
-        await update.message.reply_text(
-            f"✅ Группа зарегистрирована!\n"
-            f"📚 Группа: {group_name}\n\n"
-            f"Теперь нажми '📅 Получить расписание'!"
-        )
-        
-    elif isinstance(result, list) and len(result) > 0:
+    if isinstance(result, list):
         if len(result) == 1:
             group_name, group_url = result[0]
             user_urls[user_id] = group_url
-            await update.message.reply_text(f"✅ Группа {group_name} зарегистрирована!")
-        else:
+            
+            await update.message.reply_text(
+                f"✅ Группа зарегистрирована!\n"
+                f"📚 Группа: {group_name}\n\n"
+                f"Теперь нажми '📅 Получить расписание'!"
+            )
+            
+        elif len(result) > 1:
             keyboard = []
             for group_name, group_url in result[:5]:  
                 keyboard.append([f"🎯 {group_name}"])
@@ -153,17 +143,16 @@ async def register_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Выбери нужную группу:",
                 reply_markup=reply_markup
             )
-    else:
-        await update.message.reply_text(
-            f"❌ Группа '{group_query}' не найдена.\n\n"
-            f"Попробуй:\n"
-            f"• Проверить написание\n"
-            f"• Использовать номер группы\n"
-            f"• Убедиться, что группа есть в списке"
-        )
+        else:
+            await update.message.reply_text(
+                f"❌ Группа '{group_query}' не найдена.\n\n"
+                f"Попробуй:\n"
+                f"• Проверить написание\n"
+                f"• Использовать номер группы\n"
+                f"• Убедиться, что группа есть в списке"
+            )
 
 async def handle_group_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка выбора группы из предложенных вариантов"""
     user = update.message.from_user
     user_id = user.id
     selected_text = update.message.text
@@ -377,7 +366,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 def main():
-    """Основная функция запуска бота"""
     load_groups_data()
     
     application = Application.builder().token(TOKEN).build()
