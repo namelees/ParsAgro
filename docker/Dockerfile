@@ -33,10 +33,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install chromium
 
 # Копируем исходный код
-COPY . /app
-# Или явно
-COPY groups_data.json /app/
-COPY src/ /app/src/
+COPY src/ ./src/
+
 # Создаем директорию для логов
 RUN mkdir -p /app/logs
 
