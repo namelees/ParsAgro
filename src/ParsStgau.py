@@ -19,15 +19,36 @@ logger = logging.getLogger(__name__)
 user_urls = {} 
 groups_database = {}
 
+# Глобальная переменная для хранения последних логов
+bot_logs = []
+
+class TelegramLogHandler(logging.Handler):
+    """Кастомный обработчик логов для отправки в Telegram"""
+    def __init__(self, bot=None):
+        super().__init__()
+        self.bot = bot
+        self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    def emit(self, record):
+        global bot_logs
+        log_entry = self.format(record)
+        
+        # Сохраняем лог в глобальный список
+        bot_logs.append(log_entry)
+        
+        # Ограничиваем размер логов (последние 50 записей)
+        if len(bot_logs) > 50:
+            bot_logs = bot_logs[-50:]
+
 def load_groups_data():
     """Загружает данные групп из файла"""
     global groups_database
     possible_paths = [
-        'src/groups_data.json',           # Относительный путь
-        './src/groups_data.json',         # Тоже относительный
-        f'{os.getcwd()}/src/groups_data.json',  # Абсолютный путь
-        'groups_data.json',               # На всякий случай корень
-        os.path.join(os.path.dirname(__file__), 'groups_data.json'),  # Рядом со скриптом
+        'src/groups_data.json',
+        './src/groups_data.json', 
+        f'{os.getcwd()}/src/groups_data.json',
+        'groups_data.json',
+        os.path.join(os.path.dirname(__file__), 'groups_data.json'),
     ]
     
     for file_path in possible_paths:
@@ -61,13 +82,11 @@ def find_group(query):
         if matches:
             return matches
     
-    # 3. Поиск по частичному совпадению (без приведения к lower!)
+    # 3. Поиск по частичному совпадению
     matches = []
     for group_name, group_url in groups_database.items():
-        # Ищем вхождение запроса в название группы
         if query in group_name:
             matches.append((group_name, group_url))
-        # Дополнительно ищем case-insensitive, но сохраняем оригинальное название
         elif query.lower() in group_name.lower():
             matches.append((group_name, group_url))
     
@@ -86,6 +105,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/reg 22296\n"
         "/reg ПРОГ-20-1\n\n"
         "2. Получай расписание кнопкой ниже!\n\n"
+        "📋 Новые команды:\n"
+        "/logs - посмотреть логи работы\n"
+        "/test - тест парсера\n\n"
         "По всем вопросам: @Pro100_4elovek19"
     )
     
@@ -98,6 +120,67 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         guide_text,
         reply_markup=reply_markup
     )
+
+async def show_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать логи бота"""
+    user = update.message.from_user
+    
+    if not bot_logs:
+        await update.message.reply_text("📭 Логи пока пусты...")
+        return
+    
+    # Берем последние 20 записей
+    recent_logs = bot_logs[-20:]
+    logs_text = "📋 **Последние логи бота:**\n\n" + "\n".join(recent_logs)
+    
+    # Разбиваем на части если слишком длинное сообщение
+    if len(logs_text) > 4000:
+        logs_text = logs_text[:4000] + "\n\n... (логи обрезаны)"
+    
+    await update.message.reply_text(f"```\n{logs_text}\n```", parse_mode='MarkdownV2')
+
+async def test_playwright(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Тестовая команда для проверки парсера"""
+    try:
+        logger.info("🧪 ЗАПУСК ТЕСТА PLAYWRIGHT")
+        await update.message.reply_text("🧪 Запускаю тест Playwright...")
+        
+        from playwright.async_api import async_playwright
+        
+        async with async_playwright() as p:
+            logger.info("1. Запуск браузера...")
+            await update.message.reply_text("1. 🚀 Запуск браузера...")
+            
+            browser = await p.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']
+            )
+            logger.info("✅ Браузер запущен")
+            await update.message.reply_text("✅ Браузер запущен")
+            
+            logger.info("2. Создание страницы...")
+            await update.message.reply_text("2. 📄 Создание страницы...")
+            page = await browser.new_page()
+            logger.info("✅ Страница создана")
+            await update.message.reply_text("✅ Страница создана")
+            
+            logger.info("3. Переход на Google...")
+            await update.message.reply_text("3. 🌐 Переход на Google...")
+            await page.goto('https://www.google.com', timeout=30000)
+            logger.info("✅ Google загружен")
+            await update.message.reply_text("✅ Google загружен")
+            
+            title = await page.title()
+            logger.info(f"✅ Title страницы: {title}")
+            await update.message.reply_text(f"✅ Title страницы: {title}")
+            
+            await browser.close()
+            logger.info("🎉 ТЕСТ УСПЕШЕН - Playwright работает!")
+            await update.message.reply_text("🎉 ТЕСТ УСПЕШЕН! Playwright работает корректно!")
+            
+    except Exception as e:
+        logger.error(f"💥 ТЕСТ ПРОВАЛЕН: {e}")
+        await update.message.reply_text(f"❌ ТЕСТ ПРОВАЛЕН: {str(e)}")
 
 async def register_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Регистрация по названию группы"""
@@ -115,6 +198,7 @@ async def register_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     group_query = ' '.join(context.args)
+    logger.info(f"🔍 Пользователь {user_id} ищет группу: {group_query}")
     
     result = find_group(group_query)
     
@@ -197,9 +281,13 @@ async def get_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = user_urls[user_id]
     group_number = url.split('/')[-1]
     
+    logger.info(f"📅 Пользователь {user_id} запросил расписание")
     status_msg = await update.message.reply_text(f"🔄 Получаю расписание...")
     
     try:
+        logger.info("🔄 Вызов парсера...")
+        await update.message.reply_text("🔍 Запускаю парсер...")
+        
         schedule_data = await parse_schedule_with_containers(url)
         
         if not schedule_data:
@@ -220,65 +308,74 @@ async def parse_schedule_with_containers(group_url):
     logger.info(f"🔄 ПАРСЕР: Начало для {group_url}")
     
     try:
-        # Шаг 1: Проверка импорта
         logger.info("1. Импорт Playwright...")
-        from playwright.async_api import async_playwright
         
-        # Шаг 2: Запуск браузера
-        logger.info("2. Запуск браузера...")
-        browser = await async_playwright().chromium.launch(
-            headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage'
-            ],
-            timeout=30000
-        )
-        logger.info("✅ Браузер запущен")
-        
-        # Шаг 3: Создание страницы
-        logger.info("3. Создание страницы...")
-        page = await browser.new_page()
-        logger.info("✅ Страница создана")
-        
-        # Шаг 4: Переход по URL
-        logger.info(f"4. Переход по URL: {group_url}")
-        response = await page.goto(group_url, wait_until='domcontentloaded', timeout=60000)
-        logger.info(f"✅ Страница загружена. Status: {response.status}")
-        
-        # Шаг 5: Проверка заголовка
-        title = await page.title()
-        logger.info(f"✅ Title страницы: {title}")
-        
-        # Шаг 6: Простая проверка содержимого
-        content = await page.content()
-        logger.info(f"✅ Размер содержимого: {len(content)} символов")
-        
-        # Шаг 7: Поиск любого элемента
-        body = await page.query_selector('body')
-        if body:
-            logger.info("✅ Тело страницы найдено")
-        else:
-            logger.error("❌ Тело страницы не найдено")
-        
-        await browser.close()
-        logger.info("🎉 ПАРСЕР: Базовый тест пройден")
-        
-        # Возвращаем пустой список для продолжения работы бота
-        return []
-        
+        async with async_playwright() as p:
+            logger.info("2. Запуск браузера...")
+            browser = await p.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']
+            )
+            logger.info("✅ Браузер запущен")
+            
+            logger.info("3. Создание страницы...")
+            page = await browser.new_page()
+            logger.info("✅ Страница создана")
+            
+            logger.info(f"4. Переход по URL: {group_url}")
+            response = await page.goto(group_url, wait_until='networkidle', timeout=60000)
+            logger.info(f"✅ Страница загружена. Status: {response.status}")
+            
+            title = await page.title()
+            logger.info(f"✅ Title страницы: {title}")
+            
+            # Упрощенный парсинг для теста
+            all_containers = []
+            container_num = 1
+            
+            while container_num <= 10:  # Ограничим для теста
+                container_selector = f'#page-main > div > div > div:nth-child(7) > div > div > div:nth-child({container_num}) > div > div'
+                container = await page.query_selector(container_selector)
+                
+                if not container:
+                    break
+                
+                container_data = {
+                    'container_number': container_num,
+                    'lessons': []
+                }
+                
+                lesson_num = 1
+                while lesson_num <= 10:
+                    lesson_selector = f'{container_selector} > div:nth-child({lesson_num})'
+                    lesson_element = await page.query_selector(lesson_selector)
+                    
+                    if not lesson_element:
+                        break
+                    
+                    text = await lesson_element.text_content()
+                    if text and text.strip():
+                        container_data['lessons'].append({
+                            'lesson_number': lesson_num,
+                            'text': text.strip()
+                        })
+                    
+                    lesson_num += 1
+                
+                if container_data['lessons']:
+                    all_containers.append(container_data)
+                    logger.info(f"✅ Контейнер {container_num}: {len(container_data['lessons'])} занятий")
+                
+                container_num += 1
+            
+            await browser.close()
+            logger.info(f"🎉 ПАРСЕР: Найдено {len(all_containers)} контейнеров")
+            return all_containers
+            
     except Exception as e:
-        logger.error(f"💥 ПАРСЕР: Критическая ошибка: {str(e)}")
-        logger.error(f"💥 Тип ошибки: {type(e).__name__}")
+        logger.error(f"💥 ПАРСЕР: Ошибка: {str(e)}")
         import traceback
         logger.error(f"💥 Traceback: {traceback.format_exc()}")
-        
-        try:
-            await browser.close()
-        except:
-            pass
-            
         return None
 
 async def send_structured_schedule(update: Update, group_name: str, schedule_data: list):
@@ -328,9 +425,7 @@ async def handle_register_button(update: Update, context: ContextTypes.DEFAULT_T
         "Примеры:\n"
         "/reg 25ИИ-Д-9-2\n"
         "/reg 22296\n"
-        "/reg ПРОГ-20-1\n\n"
-        "Просто введи номер или название группы!\n"
-        "стоит отметить, что некоторые группы пишутся с использованием и верхнего и нижнего регистра"
+        "/reg ПРОГ-20-1"
     )
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -338,12 +433,11 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "❓ ПОМОЩЬ\n\n"
         "🎯 Регистрация:\n"
         "/reg название_группы\n\n"
-        "Примеры:\n"
-        "/reg 25ИИ-Д-9-2\n"
-        "/reg 22296\n"
-        "/reg ПРОГ-20-1\n\n"
         "📅 Получить расписание:\n"
         "Нажми кнопку '📅 Получить расписание'\n\n"
+        "🔧 Диагностика:\n"
+        "/test - проверить работу парсера\n"
+        "/logs - посмотреть логи\n\n"
         "🔄 Перезапуск: /start"
     )
     await update.message.reply_text(help_text)
@@ -363,7 +457,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "Используй кнопки или команды:\n"
             "/reg - регистрация группы\n"
-            "/start - инструкция"
+            "/start - инструкция\n"
+            "/test - диагностика"
         )
 
 def main():
@@ -371,9 +466,15 @@ def main():
     
     application = Application.builder().token(TOKEN).build()
     
+    # Добавляем кастомный обработчик логов
+    telegram_handler = TelegramLogHandler()
+    logger.addHandler(telegram_handler)
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("reg", register_group))
     application.add_handler(CommandHandler("help", handle_help))
+    application.add_handler(CommandHandler("test", test_playwright))
+    application.add_handler(CommandHandler("logs", show_logs))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     logger.info("Бот запущен...")
