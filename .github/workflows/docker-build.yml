@@ -28,6 +28,8 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./src
+        keep_files: true
 
     - name: Extract metadata
       id: meta
@@ -40,7 +42,6 @@ jobs:
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
           type=raw,value=latest,enable={{is_default_branch}}
-
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
@@ -64,7 +65,6 @@ jobs:
           TAG=${{ github.ref_name }}
           TAG=${TAG#v}  # убираем префикс 'v', если есть
           echo "Using tag: $TAG"
-
           # Остановка и удаление старого контейнера если он существует
           docker stop parsagro-bot || true
           docker rm parsagro-bot || true

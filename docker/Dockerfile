@@ -30,22 +30,33 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Копируем исходники приложения
-COPY src/ /app
+# Устанавливаем рабочую директорию
 WORKDIR /app
+
+# Копируем файл зависимостей
+COPY requirements.txt . 
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем Python зависимости
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Устанавливаем Chromium (без --with-deps!)
+# Устанавливаем только Chromium для Playwright
 RUN playwright install chromium
+
+# Копируем исходный код
+COPY src/ ./src/
 
 # Переменные окружения
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Открываем порт (если нужно)
-EXPOSE 5000
+# Создаем пользователя для безопасности
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
 
-# Запускаем приложение
-CMD ["python", "ParsStgau.py"]
+# Указываем рабочую директорию для пользователя
+WORKDIR /app
+
+# Команда по умолчанию
+CMD ["python", "src/ParsStgau.py"]
