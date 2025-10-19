@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Копируем файл зависимостей
-COPY ../requirements.txt .   
+COPY requirements.txt . 
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем Python зависимости
@@ -31,6 +31,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем только Chromium для Playwright
 RUN playwright install chromium
+RUN playwright install-deps
 
 # Копируем исходный код
 COPY src/ ./src/
