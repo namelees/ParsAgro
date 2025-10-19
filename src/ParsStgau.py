@@ -217,68 +217,69 @@ async def get_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def parse_schedule_with_containers(group_url):
     from playwright.async_api import async_playwright
     
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+    logger.info(f"🔄 ПАРСЕР: Начало для {group_url}")
+    
+    try:
+        # Шаг 1: Проверка импорта
+        logger.info("1. Импорт Playwright...")
+        from playwright.async_api import async_playwright
+        
+        # Шаг 2: Запуск браузера
+        logger.info("2. Запуск браузера...")
+        browser = await async_playwright().chromium.launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage'
+            ],
+            timeout=30000
+        )
+        logger.info("✅ Браузер запущен")
+        
+        # Шаг 3: Создание страницы
+        logger.info("3. Создание страницы...")
         page = await browser.new_page()
+        logger.info("✅ Страница создана")
+        
+        # Шаг 4: Переход по URL
+        logger.info(f"4. Переход по URL: {group_url}")
+        response = await page.goto(group_url, wait_until='domcontentloaded', timeout=60000)
+        logger.info(f"✅ Страница загружена. Status: {response.status}")
+        
+        # Шаг 5: Проверка заголовка
+        title = await page.title()
+        logger.info(f"✅ Title страницы: {title}")
+        
+        # Шаг 6: Простая проверка содержимого
+        content = await page.content()
+        logger.info(f"✅ Размер содержимого: {len(content)} символов")
+        
+        # Шаг 7: Поиск любого элемента
+        body = await page.query_selector('body')
+        if body:
+            logger.info("✅ Тело страницы найдено")
+        else:
+            logger.error("❌ Тело страницы не найдено")
+        
+        await browser.close()
+        logger.info("🎉 ПАРСЕР: Базовый тест пройден")
+        
+        # Возвращаем пустой список для продолжения работы бота
+        return []
+        
+    except Exception as e:
+        logger.error(f"💥 ПАРСЕР: Критическая ошибка: {str(e)}")
+        logger.error(f"💥 Тип ошибки: {type(e).__name__}")
+        import traceback
+        logger.error(f"💥 Traceback: {traceback.format_exc()}")
         
         try:
-            await page.goto(group_url, wait_until='networkidle', timeout=30000)
-            await page.wait_for_timeout(18000)  
-            
-            all_containers = []
-            container_num = 1
-            
-            while container_num <= 50:
-                container_selector = f'#page-main > div > div > div:nth-child(7) > div > div > div:nth-child({container_num}) > div > div'
-                container = await page.query_selector(container_selector)
-                
-                if not container:
-                    logger.info(f"Контейнер {container_num} не найден, завершаем")
-                    break
-                
-                await container.scroll_into_view_if_needed()
-                await page.wait_for_timeout(500)
-                
-                container_data = {
-                    'container_number': container_num,
-                    'lessons': []
-                }
-                
-                lesson_num = 1
-                while lesson_num <= 50:
-                    lesson_selector = f'{container_selector} > div:nth-child({lesson_num})'
-                    lesson_element = await page.query_selector(lesson_selector)
-                    
-                    if not lesson_element:
-                        break
-                    
-                    await lesson_element.scroll_into_view_if_needed()
-                    await page.wait_for_timeout(200)
-                    
-                    text = await lesson_element.text_content()
-                    if text and text.strip():
-                        container_data['lessons'].append({
-                            'lesson_number': lesson_num,
-                            'text': text.strip()
-                        })
-                        logger.info(f"Найдено занятие {lesson_num} в контейнере {container_num}")
-                    
-                    lesson_num += 1
-                
-                if container_data['lessons']:
-                    all_containers.append(container_data)
-                    logger.info(f"Контейнер {container_num} содержит {len(container_data['lessons'])} занятий")
-                
-                container_num += 1
-            
             await browser.close()
-            logger.info(f"Всего найдено контейнеров: {len(all_containers)}")
-            return all_containers
+        except:
+            pass
             
-        except Exception as e:
-            await browser.close()
-            logger.error(f"Ошибка при парсинге: {e}")
-            return None
+        return None
 
 async def send_structured_schedule(update: Update, group_name: str, schedule_data: list):
     total_lessons = sum(len(container['lessons']) for container in schedule_data)
