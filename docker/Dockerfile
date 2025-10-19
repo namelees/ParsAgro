@@ -1,7 +1,7 @@
 # ===============================
 #  Рабочий Dockerfile для Python + Playwright
 # ===============================
-FROM python:3.11-slim
+FROM python:3.11-bookworm
 
 # Устанавливаем системные зависимости для Chromium
 RUN apt-get update && apt-get install -y \
@@ -30,33 +30,19 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем рабочую директорию
-WORKDIR /app
-
-# Копируем файл зависимостей
-COPY requirements.txt . 
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Устанавливаем Python зависимости
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Устанавливаем только Chromium для Playwright
-RUN playwright install chromium
-
-# Копируем исходный код
 COPY src/ ./src/
 
+WORKDIR /src
+
+RUN pip install --no-cache-dir -r requirements.txt
+RUN playwright install chromium
+
 # Переменные окружения
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/src
 ENV PYTHONUNBUFFERED=1
 
-# Создаем пользователя для безопасности
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
-USER app
-
 # Указываем рабочую директорию для пользователя
-WORKDIR /app
+WORKDIR /src
 
 # Команда по умолчанию
-CMD ["python", "src/ParsStgau.py"]
+CMD ["python", "ParsStgau.py"]
