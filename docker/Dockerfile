@@ -31,7 +31,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем только Chromium для Playwright
 RUN playwright install chromium
-RUN playwright install-deps
 
 # Копируем исходный код
 COPY src/ ./src/
